@@ -7,7 +7,7 @@ use tokio::sync::oneshot;
 
 use crate::client::{Client, FutureResult, MessageStore};
 use crate::client_handler::ReplyError;
-use crate::protocol::{Publication, Reply};
+use crate::protocol::{Publication, Reply, Join, Leave};
 
 new_key_type! { pub(crate) struct SubscriptionId; }
 
@@ -30,6 +30,8 @@ pub(crate) struct SubscriptionInner {
     pub(crate) on_unsubscribed_ch: Vec<oneshot::Sender<()>>,
     pub(crate) pub_ch_write: Option<MessageStore>,
     read_timeout: Duration,
+    pub(crate) on_join: Option<Box<dyn FnMut(Join) + Send + 'static>>,
+    pub(crate) on_leave: Option<Box<dyn FnMut(Leave) + Send + 'static>>,
 }
 
 impl SubscriptionInner {
@@ -46,6 +48,8 @@ impl SubscriptionInner {
             on_unsubscribed_ch: Vec::new(),
             pub_ch_write: None,
             read_timeout,
+            on_join: None,
+            on_leave: None,
         }
     }
 
@@ -218,5 +222,19 @@ impl Subscription {
     pub fn state(&self) -> State {
         let inner = self.client.0.lock().unwrap();
         inner.subscriptions.get(self.id).map(|s| s.state).unwrap_or(State::Unsubscribed)
+    }
+
+    pub fn on_join(&self, func: impl FnMut(Join) + Send + 'static) {
+        let mut inner = self.client.0.lock().unwrap();
+        if let Some(sub) = inner.subscriptions.get_mut(self.id) {
+            sub.on_join = Some(Box::new(func));
+        }
+    }
+
+    pub fn on_leave(&self, func: impl FnMut(Leave) + Send + 'static) {
+        let mut inner = self.client.0.lock().unwrap();
+        if let Some(sub) = inner.subscriptions.get_mut(self.id) {
+            sub.on_leave = Some(Box::new(func));
+        }
     }
 }

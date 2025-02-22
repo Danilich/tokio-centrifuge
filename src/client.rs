@@ -286,14 +286,27 @@ impl ClientInner {
             let mut handler_future: Pin<Box<dyn Future<Output = bool> + Send>> = Box::pin(
                 crate::client_handler::websocket_handler(rt, stream, control_read, closer_read, protocol, move |push| {
                     if let Reply::Push(push) = push {
-                        if let PushData::Publication(publication) = push.data {
-                            let mut inner = client1.lock().unwrap();
-                            if let Some(sub_id) = inner.sub_name_to_id.get(&push.channel).copied() {
-                                if let Some(sub) = inner.subscriptions.get_mut(sub_id) {
-                                    if sub.state == subscription::State::Subscribed {
-                                        if let Some(ref mut on_publication) = sub.on_publication {
-                                            on_publication(publication);
+                        let mut inner = client1.lock().unwrap();
+                        if let Some(sub_id) = inner.sub_name_to_id.get(&push.channel).copied() {
+                            if let Some(sub) = inner.subscriptions.get_mut(sub_id) {
+                                if sub.state == subscription::State::Subscribed {
+                                    match push.data {
+                                        PushData::Publication(publication) => {
+                                            if let Some(ref mut on_publication) = sub.on_publication {
+                                                on_publication(publication);
+                                            }
                                         }
+                                        PushData::Join(join) => {
+                                            if let Some(ref mut on_join) = sub.on_join {
+                                                on_join(join);
+                                            }
+                                        }
+                                        PushData::Leave(leave) => {
+                                            if let Some(ref mut on_leave) = sub.on_leave {
+                                                on_leave(leave);
+                                            }
+                                        }
+                                        _ => {}
                                     }
                                 }
                             }

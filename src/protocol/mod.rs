@@ -46,10 +46,18 @@ pub struct Push {
 }
 
 #[derive(Debug, Clone)]
+pub struct ClientInfo {
+    pub client: String,
+    pub user: String,
+    pub conn_info: Option<String>,
+    pub chan_info: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum PushData {
     Publication(Publication),
-    Join(Join),
-    Leave(Leave),
+    Join(protocol::Join),
+    Leave(protocol::Leave),
     Unsubscribe(Unsubscribe),
     Message(Message),
     Subscribe(Subscribe),
@@ -232,6 +240,37 @@ impl From<RawCommand> for Command {
     }
 }
 
+impl From<RawPush> for Push {
+    fn from(value: RawPush) -> Self {
+        let data = if let Some(v) = value.publication {
+            PushData::Publication(v)
+        } else if let Some(v) = value.join {
+            PushData::Join(v)
+        } else if let Some(v) = value.leave {
+            PushData::Leave(v)
+        } else if let Some(v) = value.unsubscribe {
+            PushData::Unsubscribe(v)
+        } else if let Some(v) = value.message {
+            PushData::Message(v)
+        } else if let Some(v) = value.subscribe {
+            PushData::Subscribe(v)
+        } else if let Some(v) = value.connect {
+            PushData::Connect(Box::new(v))
+        } else if let Some(v) = value.disconnect {
+            PushData::Disconnect(v)
+        } else if let Some(v) = value.refresh {
+            PushData::Refresh(v)
+        } else {
+            PushData::Empty
+        };
+
+        Push {
+            channel: value.channel,
+            data,
+        }
+    }
+}
+
 impl From<RawReply> for Reply {
     fn from(value: RawReply) -> Self {
         if let Some(v) = value.error {
@@ -262,37 +301,6 @@ impl From<RawReply> for Reply {
             Self::SubRefresh(v)
         } else {
             Self::Empty
-        }
-    }
-}
-
-impl From<RawPush> for Push {
-    fn from(value: RawPush) -> Self {
-        let data = if let Some(v) = value.publication {
-            PushData::Publication(v)
-        } else if let Some(v) = value.join {
-            PushData::Join(v)
-        } else if let Some(v) = value.leave {
-            PushData::Leave(v)
-        } else if let Some(v) = value.unsubscribe {
-            PushData::Unsubscribe(v)
-        } else if let Some(v) = value.message {
-            PushData::Message(v)
-        } else if let Some(v) = value.subscribe {
-            PushData::Subscribe(v)
-        } else if let Some(v) = value.connect {
-            PushData::Connect(Box::new(v))
-        } else if let Some(v) = value.disconnect {
-            PushData::Disconnect(v)
-        } else if let Some(v) = value.refresh {
-            PushData::Refresh(v)
-        } else {
-            PushData::Empty
-        };
-
-        Self {
-            channel: value.channel,
-            data,
         }
     }
 }

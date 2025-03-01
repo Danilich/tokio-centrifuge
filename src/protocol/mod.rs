@@ -3,6 +3,7 @@ mod protocol;
 
 pub use protocol::*;
 use serde::{Serialize, Serializer};
+pub use protocol::{PresenceRequest, PresenceStatsRequest, PresenceResult, PresenceStatsResult};
 
 #[derive(Debug, Clone)]
 pub enum Command {

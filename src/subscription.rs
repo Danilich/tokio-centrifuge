@@ -7,7 +7,7 @@ use tokio::sync::oneshot;
 
 use crate::client::{Client, FutureResult, MessageStore};
 use crate::client_handler::ReplyError;
-use crate::protocol::{Publication, Reply, Join, Leave};
+use crate::protocol::{Publication, Reply, Join, Leave, PresenceRequest, PresenceStatsRequest, PresenceResult, PresenceStatsResult};
 
 new_key_type! { pub(crate) struct SubscriptionId; }
 
@@ -236,5 +236,67 @@ impl Subscription {
         if let Some(sub) = inner.subscriptions.get_mut(self.id) {
             sub.on_leave = Some(Box::new(func));
         }
+    }
+
+    pub fn presence(&self) -> FutureResult<impl Future<Output = Result<PresenceResult, ()>>> {
+        let mut inner = self.client.0.lock().unwrap();
+        let read_timeout = inner.read_timeout;
+        let deadline = Instant::now() + read_timeout;
+        let rx = if let Some(sub) = inner.subscriptions.get_mut(self.id) {
+            if let Some(ref mut pub_ch_write) = sub.pub_ch_write {
+                let request = PresenceRequest {
+                    channel: sub.channel.to_string(),
+                };
+                pub_ch_write.publish(sub.channel.clone(), serde_json::to_vec(&request).unwrap_or_default())
+            } else {
+                let (tx, rx) = oneshot::channel();
+                let _ = tx.send(Err(ReplyError::Closed));
+                rx
+            }
+        } else {
+            let (tx, rx) = oneshot::channel();
+            let _ = tx.send(Err(ReplyError::Closed));
+            rx
+        };
+        
+        FutureResult(async move {
+            let result = tokio::time::timeout_at(deadline.into(), rx).await;
+            if let Ok(Ok(Ok(Reply::Presence(presence_result)))) = result {
+                Ok(presence_result)
+            } else {
+                Err(())
+            }
+        })
+    }
+
+    pub fn presence_stats(&self) -> FutureResult<impl Future<Output = Result<PresenceStatsResult, ()>>> {
+        let mut inner = self.client.0.lock().unwrap();
+        let read_timeout = inner.read_timeout;
+        let deadline = Instant::now() + read_timeout;
+        let rx = if let Some(sub) = inner.subscriptions.get_mut(self.id) {
+            if let Some(ref mut pub_ch_write) = sub.pub_ch_write {
+                let request = PresenceStatsRequest {
+                    channel: sub.channel.to_string(),
+                };
+                pub_ch_write.publish(sub.channel.clone(), serde_json::to_vec(&request).unwrap_or_default())
+            } else {
+                let (tx, rx) = oneshot::channel();
+                let _ = tx.send(Err(ReplyError::Closed));
+                rx
+            }
+        } else {
+            let (tx, rx) = oneshot::channel();
+            let _ = tx.send(Err(ReplyError::Closed));
+            rx
+        };
+        
+        FutureResult(async move {
+            let result = tokio::time::timeout_at(deadline.into(), rx).await;
+            if let Ok(Ok(Ok(Reply::PresenceStats(stats_result)))) = result {
+                Ok(stats_result)
+            } else {
+                Err(())
+            }
+        })
     }
 }
